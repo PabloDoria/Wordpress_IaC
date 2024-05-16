@@ -1,0 +1,40 @@
+---
+- hosts: wordpress
+  tasks:
+    - name: Ensure Docker is installed
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Deploy MySQL container
+      docker_container:
+        name: mysql
+        image: mysql:5.7
+        state: started
+        ports:
+          - "3306:3306"
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: wordpress
+          MYSQL_USER: wpuser
+          MYSQL_PASSWORD: wppassword
+
+    - name: Deploy WordPress container
+      docker_container:
+        name: wordpress
+        image: wordpress:latest
+        state: started
+        ports:
+          - "8080:80"
+        env:
+          WORDPRESS_DB_HOST: mysql:3306
+          WORDPRESS_DB_NAME: wordpress
+          WORDPRESS_DB_USER: wpuser
+          WORDPRESS_DB_PASSWORD: wppassword
