@@ -1,20 +1,28 @@
 ---
-- hosts: wordpress
+- hosts: localhost
   tasks:
+    # Asegurar que Docker esté instalado
     - name: Ensure Docker is installed
       apt:
         name: docker.io
         state: present
         update_cache: yes
 
+    # Asegurar que el servicio de Docker esté ejecutándose
     - name: Ensure Docker is running
       service:
         name: docker
         state: started
         enabled: yes
 
+    # Crear una red de Docker llamada wp_network
+    - name: Create Docker network
+      community.docker.docker_network:
+        name: wp_network
+
+    # Desplegar el contenedor de MySQL
     - name: Deploy MySQL container
-      docker_container:
+      community.docker.docker_container:
         name: mysql
         image: mysql:5.7
         state: started
@@ -25,16 +33,44 @@
           MYSQL_DATABASE: wordpress
           MYSQL_USER: wpuser
           MYSQL_PASSWORD: wppassword
+        networks:
+          - name: wp_network
 
+    # Obtener la dirección IP del contenedor de MySQL
+    - name: Get MySQL container IP address
+      shell: "docker inspect mysql | jq -r '.[0].NetworkSettings.Networks.wp_network.IPAddress'"
+      register: mysql_ip_address
+      changed_when: false
+
+    # Mostrar la dirección IP de MySQL para depuración
+    - name: Debug MySQL IP
+      debug:
+        var: mysql_ip_address.stdout
+
+    # Desplegar el contenedor de WordPress
     - name: Deploy WordPress container
-      docker_container:
+      community.docker.docker_container:
         name: wordpress
         image: wordpress:latest
         state: started
         ports:
           - "8080:80"
         env:
-          WORDPRESS_DB_HOST: mysql:3306
+          WORDPRESS_DB_HOST: "{{ mysql_ip_address.stdout }}:3306"
           WORDPRESS_DB_NAME: wordpress
           WORDPRESS_DB_USER: wpuser
           WORDPRESS_DB_PASSWORD: wppassword
+        networks:
+          - name: wp_network
+
+    # Instalar dnsutils en el contenedor de WordPress
+    - name: Install dnsutils in WordPress container
+      community.docker.docker_container_exec:
+        container: wordpress
+        command: /bin/bash -c "apt-get update && apt-get install -y dnsutils"
+
+    # Instalar mariadb-client en el contenedor de WordPress
+    - name: Install mariadb-client in WordPress container
+      community.docker.docker_container_exec:
+        container: wordpress
+        command: /bin/bash -c "apt-get update && apt-get install -y mariadb-client"
